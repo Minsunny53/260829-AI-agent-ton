@@ -815,7 +815,6 @@ function exportBasic(){
   wb.xlsx.writeBuffer().then(function(buf){
     downloadBlob(buf, (m.title||'물품_구입_내역')+'_'+todayStr()+'.xlsx');
     toast('기본양식을 내려받았습니다.');
-    Sync.log('export_basic');
   }).catch(function(e){ toast('엑셀 생성 실패: '+e.message); });
 }
 
@@ -989,7 +988,6 @@ function applyTemplate(){
     downloadBlob(buf, base+'_작성완료.xlsx');
     $('mapMask').hidden=true;
     toast('양식에 채워 내려받았습니다.');
-    Sync.log('export_template');
   }).catch(function(e){ notice($('mapMsg'),'저장 실패: '+esc(e.message),'e'); });
 }
 
@@ -1019,25 +1017,6 @@ function fallbackCopy(text){
 }
 
 /* =========================================================
-   Apps Script (Gemini 프록시 · 선택적 구글시트 기록)
-   ========================================================= */
-var Sync = {
-  log:function(action){
-    if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('__APPS_SCRIPT')===0) return;
-    var t=totals(), m=readMeta();
-    try{
-      fetch(APPS_SCRIPT_URL,{
-        method:'POST', mode:'no-cors',
-        headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body:JSON.stringify({sheet:'pumui', action:action, at:new Date().toISOString(),
-          title:m.title, count:t.count, total:t.total,
-          items:State.rows.map(function(r,i){ return rowValues(r,i); })})
-      }).catch(function(){});
-    }catch(e){}
-  }
-};
-
-/* =========================================================
    이력
    ========================================================= */
 function persistHistory(){ try{ localStorage.setItem(LS.hist, JSON.stringify(State.history)); }catch(e){} }
@@ -1050,7 +1029,7 @@ function saveHistory(){
     rows:State.rows.map(function(r){ return {name:r.name,spec:r.spec,qty:num(r.qty),unit:num(r.unit),ship:num(r.ship),note:r.note,vendor:r.vendor,url:r.url}; }) };
   State.history.unshift(item);
   if(State.history.length>60) State.history=State.history.slice(0,60);
-  persistHistory(); renderHistory(); Sync.log('save_history');
+  persistHistory(); renderHistory();
   toast('기안 이력에 저장했습니다.');
 }
 
@@ -1289,7 +1268,6 @@ function callAIParse(){
       notice($('parseMsg'),
         (wasAppend ? '이번 장바구니에서 '+newRows.length+'건을 추가로 정리했습니다(총 '+State.rows.length+'건). ' : 'AI가 물품 '+State.rows.length+'건을 정리했습니다. ')
         + '금액과 규격은 한 번 더 확인해 주세요.', 'g');
-      Sync.log('ai_parse');
     })
     .catch(function(){
       btn.disabled=false; btn.textContent=old;
@@ -1493,12 +1471,6 @@ function boot(){
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot);
 else boot();
-
-window.__PUMUI__ = { parseCart:parseCart, totals:totals, State:State, rowAmount:rowAmount, rowNote:rowNote,
-  num:num, syncShipNote:syncShipNote, htmlToText:htmlToText, callAIParse:callAIParse, aiParseAvailable:aiParseAvailable,
-  renderRows:renderRows, mallNameFromUrl:mallNameFromUrl, hostnameOf:hostnameOf, overrideVendorByMall:overrideVendorByMall,
-  UIState:UIState, enterAppendMode:enterAppendMode, setAppendMode:setAppendMode,
-  readImageFile:readImageFile, clearAttachedImage:clearAttachedImage };
 </script>
 </body>
 </html>
