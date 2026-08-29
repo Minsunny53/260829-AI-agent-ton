@@ -10,9 +10,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
 /* ============ 토큰 ============ */
 :root{
@@ -211,8 +208,6 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
       </div>
     </div>
     <div class="tools">
-      <span id="authState" class="chip">로컬 전용</span>
-      <button id="btnAuth" class="btn mini">로그인</button>
       <div class="seg" role="group" aria-label="글씨 크기">
         <button id="fsDown" title="글씨 작게">가−</button>
         <button id="fsReset" title="글씨 기본">기본</button>
@@ -232,11 +227,12 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
       <div class="spacer"></div>
       <button id="btnSample" class="btn mini ghost">예시 넣기</button>
       <button id="btnClearIn" class="btn mini ghost">지우기</button>
-      <button id="btnParse" class="btn primary">표로 정리</button>
+      <button id="btnParse" class="btn">규칙으로 정리</button>
+      <button id="btnParseAI" class="btn primary" title="형식이 다른 쇼핑몰(G마켓·쿠팡 등)에 사용">✨ AI로 정리</button>
     </div>
     <div class="card-bd">
       <textarea id="rawInput" class="inp" placeholder="쇼핑몰 장바구니 화면을 드래그해서 복사한 뒤 여기에 붙여넣으세요. 웹페이지에서 그대로 복사하면 상품 링크까지 자동으로 따라옵니다."></textarea>
-      <p class="hint">아이스크림몰·쿠팡·네이버 등 &quot;옵션 / N개&quot;와 &quot;금액원&quot; 형태면 대부분 인식합니다. 화면에 보이는 금액은 <b>수량 합계</b>로 보고 단가를 역산합니다.</p>
+      <p class="hint">아이스크림몰처럼 &quot;옵션 / N개&quot;·&quot;금액원&quot; 형태면 <b>규칙으로 정리</b>가 빠릅니다. G마켓·쿠팡처럼 형식이 다르면 <b>✨ AI로 정리</b>를 눌러보세요.</p>
       <div id="parseMsg" class="notice w" hidden></div>
     </div>
   </section>
@@ -269,31 +265,19 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
     </div>
   </section>
 
-  <!-- 예산 · 기안정보 -->
-  <section class="card">
-    <div class="card-hd"><h2><span class="step">3</span>기안 정보 · 예산 한도</h2></div>
-    <div class="card-bd">
-      <div class="grid-meta">
-        <div><label class="fl" for="mTitle">기안 제목</label><input id="mTitle" class="inp" placeholder="학급 운영 물품 구입" /></div>
-        <div><label class="fl" for="mProject">사업명</label><input id="mProject" class="inp" placeholder="학급운영비" /></div>
-        <div><label class="fl" for="mAccount">예산과목</label><input id="mAccount" class="inp" placeholder="학교운영비-일반수용비" /></div>
-        <div><label class="fl" for="mBudget">배정액(원)</label><input id="mBudget" class="inp num" inputmode="numeric" placeholder="0" /></div>
-        <div><label class="fl" for="mDate">기안일</label><input id="mDate" class="inp" type="date" /></div>
-        <div><label class="fl" for="mDrafter">기안자</label><input id="mDrafter" class="inp" placeholder="이름" /></div>
-      </div>
-      <div style="margin-top:.5rem"><label class="fl" for="mPurpose">사용 목적</label><input id="mPurpose" class="inp" placeholder="학생 학습활동 및 학급 운영에 활용하고자 함" /></div>
-      <div id="budgetMsg" class="notice g" hidden></div>
-    </div>
-  </section>
-
-  <!-- 4. 내보내기 -->
+  <!-- 3. 내보내기 -->
   <section class="card">
     <div class="card-hd">
-      <h2><span class="step">4</span>엑셀 내보내기</h2>
+      <h2><span class="step">3</span>엑셀 내보내기</h2>
       <div class="spacer"></div>
       <button id="btnCopyTable" class="btn mini">표 복사(한글 붙여넣기용)</button>
       <button id="btnXlsxBasic" class="btn seal-btn">기본양식 다운로드</button>
     </div>
+    <div class="card-bd">
+      <label class="fl" for="docTitle">문서 제목 (선택, 파일명·이력에 사용)</label>
+      <input id="docTitle" class="inp" style="max-width:22rem" placeholder="예: 학급 운영 물품 구입" />
+    </div>
+
     <div class="card-bd">
       <label class="fl">학교별 재정기안 양식에 채워넣기 (.xlsx)</label>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
@@ -307,14 +291,14 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
   <!-- 5. 이력 -->
   <section class="card">
     <div class="card-hd">
-      <h2><span class="step">5</span>기안 이력</h2>
+      <h2><span class="step">4</span>기안 이력</h2>
       <div class="spacer"></div>
       <button id="btnSaveHist" class="btn primary">현재 내역 저장</button>
     </div>
     <div class="card-bd"><div id="histBox" class="hist"></div></div>
   </section>
 
-  <p class="foot">데이터는 이 브라우저에 저장됩니다. 로그인하면 계정으로도 함께 보관됩니다.</p>
+  <p class="foot">데이터는 이 브라우저에만 저장됩니다.</p>
 </main>
 
 <!-- 매핑 모달 -->
@@ -341,24 +325,6 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
   </div>
 </div>
 
-<!-- 로그인 모달 -->
-<div id="authMask" class="mask" hidden>
-  <div class="modal sm" role="dialog" aria-modal="true" aria-labelledby="authTitle">
-    <div class="modal-hd" id="authTitle">로그인</div>
-    <div class="modal-bd">
-      <div><label class="fl" for="authEmail">이메일</label><input id="authEmail" class="inp" type="email" autocomplete="username" /></div>
-      <div style="margin-top:.5rem"><label class="fl" for="authPw">비밀번호</label><input id="authPw" class="inp" type="password" autocomplete="current-password" /></div>
-      <div id="authMsg" class="notice e" hidden></div>
-      <p class="hint">로그인하지 않아도 모든 기능을 쓸 수 있습니다. 이력이 이 브라우저에만 남습니다.</p>
-    </div>
-    <div class="modal-ft">
-      <button id="authClose" class="btn ghost">닫기</button>
-      <button id="authSignup" class="btn">회원가입</button>
-      <button id="authLogin" class="btn primary">로그인</button>
-    </div>
-  </div>
-</div>
-
 <!-- 확인 모달 -->
 <div id="confMask" class="mask" hidden>
   <div class="modal sm" role="dialog" aria-modal="true" aria-labelledby="confTitle">
@@ -378,8 +344,7 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
    품의기안 자동정리 — 단일 HTML
    배포 시 GitHub Actions가 아래 토큰을 치환합니다.
    ========================================================= */
-var FIREBASE_CONFIG_RAW = '__FIREBASE_CONFIG__';
-var APPS_SCRIPT_URL     = '__APPS_SCRIPT_URL__';
+var APPS_SCRIPT_URL = '__APPS_SCRIPT_URL__';
 
 var LS = { rows:'pumui_rows_v1', meta:'pumui_meta_v1', hist:'pumui_hist_v1', theme:'pumui_theme_v1', fs:'pumui_fs_v1' };
 
@@ -534,10 +499,11 @@ function parseCart(raw){
         }
       }
       if(qty>0 && (name || amount)){
-        g.items.push({
+        var newRow = {
           name:name, spec:(spec==='단일상품'||spec==='단품')?'':spec, qty:qty,
           amount:amount, brand:brand, url:url, note:cartNote
-        });
+        };
+        g.items.push(newRow);
       }
       pendLinks=[]; pendTexts=[];
       continue;
@@ -559,12 +525,14 @@ function parseCart(raw){
       var it=gr.items[ii];
       var unit = it.qty>0 ? Math.round(it.amount/it.qty) : it.amount;
       sum += it.amount;
-      rows.push({
+      var newr = {
         id:uid(), name:it.name, spec:it.spec, qty:it.qty,
         unit:unit, ship:(ii===0?ship:0), note:it.note,
         vendor: gr.vendor || it.brand || '', url:it.url,
         flag: (it.qty>0 && it.amount % it.qty !== 0)
-      });
+      };
+      syncShipNote(newr);
+      rows.push(newr);
     }
     if(gr.declared!=null && gr.declared!==sum){
       warns.push('그룹 '+(gi+1)+': 화면 표시 합계 '+won(gr.declared)+'원과 항목 합계 '+won(sum)+'원이 다릅니다.');
@@ -580,11 +548,14 @@ var State = { rows:[], history:[] };
 
 function blankRow(){ return {id:uid(),name:'',spec:'',qty:1,unit:0,ship:0,note:'',vendor:'',url:'',flag:false}; }
 function rowAmount(r){ return num(r.unit)*num(r.qty) + num(r.ship); }
-function rowNote(r){
-  var s = num(r.ship)>0 ? ('배송비 '+won(num(r.ship))+'원') : '';
-  if(r.note && s) return s+' / '+r.note;
-  return s || (r.note||'');
+/* 배송비가 있으면 비고란 맨 앞에 "배송비 N원"을 실제 값으로 써 넣는다(표시용 placeholder가 아님).
+   기존에 자동으로 붙여둔 배송비 문구는 새 값으로 교체하고, 사용자가 적어 둔 나머지 메모는 그대로 둔다. */
+function syncShipNote(r){
+  var core = String(r.note||'').replace(/^배송비\s*[0-9,]+\s*원\s*(\/\s*)?/,'').trim();
+  var shipTxt = num(r.ship)>0 ? ('배송비 '+won(num(r.ship))+'원') : '';
+  r.note = shipTxt && core ? (shipTxt+' / '+core) : (shipTxt || core);
 }
+function rowNote(r){ return r.note||''; }
 function totals(){
   var t={count:State.rows.length, qty:0, goods:0, ship:0, total:0};
   for(var i=0;i<State.rows.length;i++){
@@ -602,17 +573,11 @@ function saveLocal(){
   }catch(e){}
 }
 function readMeta(){
-  return {
-    title:$('mTitle').value, project:$('mProject').value, account:$('mAccount').value,
-    budget:num($('mBudget').value), date:$('mDate').value,
-    drafter:$('mDrafter').value, purpose:$('mPurpose').value
-  };
+  return { title:$('docTitle').value };
 }
 function writeMeta(m){
   if(!m) return;
-  $('mTitle').value=m.title||''; $('mProject').value=m.project||''; $('mAccount').value=m.account||'';
-  $('mBudget').value=m.budget?won(m.budget):''; $('mDate').value=m.date||todayStr();
-  $('mDrafter').value=m.drafter||''; $('mPurpose').value=m.purpose||'';
+  $('docTitle').value=m.title||'';
 }
 
 /* =========================================================
@@ -643,7 +608,7 @@ function renderRows(){
       + '<div class="c-unit" data-l="예상단가"><input data-k="unit" class="num" inputmode="numeric" value="'+won(num(r.unit))+'" /></div>'
       + '<div class="c-ship" data-l="배송비"><input data-k="ship" class="num" inputmode="numeric" value="'+won(num(r.ship))+'" /></div>'
       + '<div class="c-amt" data-l="예상금액"><input class="num" data-k="_amt" readonly value="'+won(rowAmount(r))+'" /></div>'
-      + '<div class="c-note" data-l="비고"><input data-k="note" value="'+esc(r.note)+'" placeholder="'+(num(r.ship)>0?esc('배송비 '+won(num(r.ship))+'원 자동 포함'):'')+'" /></div>'
+      + '<div class="c-note" data-l="비고"><input data-k="note" value="'+esc(r.note)+'" placeholder="비고" /></div>'
       + '<div class="c-vendor" data-l="구입처"><input data-k="vendor" value="'+esc(r.vendor)+'" /></div>'
       + '<div class="c-url" data-l="구입처 링크"><input data-k="url" value="'+esc(r.url)+'" /></div>'
       + '<div class="c-rm"><button class="rm" data-act="del" title="이 행 삭제" aria-label="행 삭제">✕</button></div>'
@@ -658,15 +623,6 @@ function renderTotals(){
   $('sCount').textContent=t.count; $('sQty').textContent=won(t.qty);
   $('sGoods').textContent=won(t.goods); $('sShip').textContent=won(t.ship);
   $('sTotal').textContent=won(t.total);
-  renderBudget(t.total);
-}
-function renderBudget(total){
-  var b=num($('mBudget').value), el=$('budgetMsg');
-  if(!b){ notice(el,'',''); return; }
-  var left=b-total;
-  if(left<0) notice(el,'<b>예산 초과</b> · 배정액 '+won(b)+'원 / 합계 '+won(total)+'원 → <b>'+won(-left)+'원 초과</b>','e');
-  else if(b>0 && left<=b*0.05) notice(el,'배정액 '+won(b)+'원 · 잔액 <b>'+won(left)+'원</b> (5% 이내)','w');
-  else notice(el,'배정액 '+won(b)+'원 · 집행 '+won(total)+'원 · 잔액 <b>'+won(left)+'원</b>','g');
 }
 
 function findRow(id){ for(var i=0;i<State.rows.length;i++){ if(State.rows[i].id===id) return State.rows[i]; } return null; }
@@ -699,21 +655,14 @@ function exportBasic(){
   ws.columns=[{width:6},{width:34},{width:16},{width:7},{width:12},{width:13},{width:20},{width:16},{width:40}];
 
   var thin={style:'thin',color:{argb:'FFB9C4CE'}};
-  var titleRow=ws.addRow([ (m.title||'물품 구입 품의') ]);
+  var titleRow=ws.addRow([ (m.title||'물품 구입 내역') ]);
   ws.mergeCells(titleRow.number,1,titleRow.number,9);
   titleRow.getCell(1).font={size:15,bold:true};
   titleRow.getCell(1).alignment={horizontal:'center',vertical:'middle'};
   titleRow.height=26;
 
-  var info=[
-    ['사업명', m.project||'', '예산과목', m.account||'', '기안일', m.date||todayStr()],
-    ['기안자', m.drafter||'', '사용 목적', m.purpose||'', '배정액', m.budget||0]
-  ];
-  for(var a=0;a<info.length;a++){
-    var ir=ws.addRow(info[a]);
-    [1,3,5].forEach(function(c){ ir.getCell(c).font={bold:true,size:10}; });
-    ir.getCell(6).numFmt='#,##0';
-  }
+  var dateRow=ws.addRow(['작성일', todayStr()]);
+  dateRow.getCell(1).font={bold:true,size:10};
   ws.addRow([]);
 
   var hr=ws.addRow(HEADERS);
@@ -745,17 +694,10 @@ function exportBasic(){
   sr.getCell(4).alignment={horizontal:'center'};
   sr.getCell(6).numFmt='#,##0';
 
-  if(m.budget){
-    ws.addRow([]);
-    var br=ws.addRow(['', '배정액', m.budget, '집행액', t.total, '잔액', m.budget-t.total]);
-    br.getCell(2).font={bold:true}; br.getCell(4).font={bold:true}; br.getCell(6).font={bold:true};
-    [3,5,7].forEach(function(c){ br.getCell(c).numFmt='#,##0'; });
-  }
-
   ws.pageSetup={paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.4,right:.4,top:.5,bottom:.5,header:.2,footer:.2}};
 
   wb.xlsx.writeBuffer().then(function(buf){
-    downloadBlob(buf, (m.title||'품의_물품내역')+'_'+(m.date||todayStr())+'.xlsx');
+    downloadBlob(buf, (m.title||'물품_구입_내역')+'_'+todayStr()+'.xlsx');
     toast('기본양식을 내려받았습니다.');
     Sync.log('export_basic');
   }).catch(function(e){ toast('엑셀 생성 실패: '+e.message); });
@@ -961,55 +903,9 @@ function fallbackCopy(text){
 }
 
 /* =========================================================
-   Firebase · Apps Script
+   Apps Script (Gemini 프록시 · 선택적 구글시트 기록)
    ========================================================= */
 var Sync = {
-  ready:false, user:null, db:null,
-  init:function(){
-    var cfg=null;
-    try{
-      if(FIREBASE_CONFIG_RAW && FIREBASE_CONFIG_RAW.indexOf('__FIREBASE')!==0) cfg=JSON.parse(FIREBASE_CONFIG_RAW);
-    }catch(e){ cfg=null; }
-    if(!cfg || typeof firebase==='undefined'){ Sync.paint(); return; }
-    try{
-      firebase.initializeApp(cfg);
-      Sync.db=firebase.database(); Sync.ready=true;
-      firebase.auth().onAuthStateChanged(function(u){
-        Sync.user=u; Sync.paint();
-        if(u) Sync.pullHistory();
-      });
-    }catch(e){ Sync.ready=false; }
-    Sync.paint();
-  },
-  paint:function(){
-    var el=$('authState'), btn=$('btnAuth');
-    if(!Sync.ready){ el.textContent='로컬 전용'; btn.textContent='로그인'; btn.disabled=true; btn.title='배포 환경에서만 사용할 수 있습니다'; return; }
-    btn.disabled=false;
-    if(Sync.user){ el.textContent=Sync.user.email||'로그인됨'; btn.textContent='로그아웃'; }
-    else { el.textContent='게스트'; btn.textContent='로그인'; }
-  },
-  path:function(){ return 'users/'+Sync.user.uid+'/pumuiDrafts'; },
-  pushHistory:function(item){
-    if(!Sync.ready || !Sync.user) return;
-    try{ Sync.db.ref(Sync.path()+'/'+item.id).set(item); }catch(e){}
-  },
-  delHistory:function(id){
-    if(!Sync.ready || !Sync.user) return;
-    try{ Sync.db.ref(Sync.path()+'/'+id).remove(); }catch(e){}
-  },
-  pullHistory:function(){
-    if(!Sync.ready || !Sync.user) return;
-    try{
-      Sync.db.ref(Sync.path()).once('value').then(function(snap){
-        var v=snap.val(); if(!v) return;
-        var merged=State.history.slice(), seen={};
-        for(var i=0;i<merged.length;i++) seen[merged[i].id]=true;
-        for(var k in v){ if(!seen[k]) merged.push(v[k]); }
-        merged.sort(function(a,b){ return (b.savedAt||0)-(a.savedAt||0); });
-        State.history=merged; persistHistory(); renderHistory();
-      });
-    }catch(e){}
-  },
   log:function(action){
     if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('__APPS_SCRIPT')===0) return;
     var t=totals(), m=readMeta();
@@ -1018,8 +914,7 @@ var Sync = {
         method:'POST', mode:'no-cors',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
         body:JSON.stringify({sheet:'pumui', action:action, at:new Date().toISOString(),
-          user:(Sync.user&&Sync.user.email)||'guest', title:m.title, project:m.project,
-          account:m.account, count:t.count, total:t.total,
+          title:m.title, count:t.count, total:t.total,
           items:State.rows.map(function(r,i){ return rowValues(r,i); })})
       }).catch(function(){});
     }catch(e){}
@@ -1039,7 +934,7 @@ function saveHistory(){
     rows:State.rows.map(function(r){ return {name:r.name,spec:r.spec,qty:num(r.qty),unit:num(r.unit),ship:num(r.ship),note:r.note,vendor:r.vendor,url:r.url}; }) };
   State.history.unshift(item);
   if(State.history.length>60) State.history=State.history.slice(0,60);
-  persistHistory(); renderHistory(); Sync.pushHistory(item); Sync.log('save_history');
+  persistHistory(); renderHistory(); Sync.log('save_history');
   toast('기안 이력에 저장했습니다.');
 }
 
@@ -1111,14 +1006,79 @@ function htmlToText(html){
   box.style.width='800px'; box.style.whiteSpace='pre-wrap';
   box.innerHTML=html;
   document.body.appendChild(box);
+
   var as=box.querySelectorAll('a');
   for(var i=0;i<as.length;i++){
     var a=as[i], t=(a.textContent||'').trim(), href=a.href||'';
     if(t && /^https?:/i.test(href)) a.textContent='\n['+t+']('+href+')\n';
   }
-  var txt = box.innerText || box.textContent || '';
+  // innerText는 detach된 요소·headless 환경에서 레이아웃 정보가 없어 줄바꿈이 유실되므로,
+  // 표/블록 경계에 직접 탭·개행 문자를 심어 textContent로 읽는다.
+  var brs=box.querySelectorAll('br');
+  for(var b=0;b<brs.length;b++) brs[b].replaceWith('\n');
+  var cells=box.querySelectorAll('td,th');
+  for(var c=0;c<cells.length;c++) cells[c].appendChild(document.createTextNode('\t'));
+  var blocks=box.querySelectorAll('tr,p,div,li,h1,h2,h3,h4,h5,h6');
+  for(var k=0;k<blocks.length;k++) blocks[k].appendChild(document.createTextNode('\n'));
+
+  var txt = box.textContent || '';
   box.remove();
-  return txt.replace(/\n{3,}/g,'\n\n');
+  return txt.replace(/[ \t]+\n/g,'\n').replace(/\t{2,}/g,'\t').replace(/\n{3,}/g,'\n\n').trim();
+}
+
+/* =========================================================
+   AI 정리 — Apps Script 프록시를 거쳐 Gemini Flash 호출
+   (Gemini 키는 브라우저에 노출되지 않고 Apps Script 안에만 존재)
+   ========================================================= */
+function aiParseAvailable(){
+  return !!(APPS_SCRIPT_URL && APPS_SCRIPT_URL.indexOf('__APPS_SCRIPT')!==0);
+}
+function callAIParse(){
+  var raw=$('rawInput').value;
+  if(!raw.trim()){ notice($('parseMsg'),'붙여넣은 내용이 없습니다.','e'); return; }
+  if(!aiParseAvailable()){
+    notice($('parseMsg'),'AI로 정리는 배포된 환경(Apps Script 프록시)에서만 동작합니다. 지금은 <b>규칙으로 정리</b>를 이용해 주세요.','e');
+    return;
+  }
+  var btn=$('btnParseAI'), old=btn.textContent;
+  btn.disabled=true; btn.textContent='정리 중…';
+  notice($('parseMsg'),'AI가 내용을 읽는 중입니다…','w');
+
+  fetch(APPS_SCRIPT_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({ action:'ai_parse_cart', text: raw })
+  }).then(function(res){ return res.json(); })
+    .then(function(data){
+      btn.disabled=false; btn.textContent=old;
+      if(!data || data.ok===false){
+        var em=String((data&&data.error)||'');
+        var msg = /503|UNAVAILABLE/i.test(em) ? 'AI 서버가 일시적으로 혼잡합니다. 잠시 후 다시 시도해 주세요.'
+                : /429|RESOURCE_EXHAUSTED|quota/i.test(em) ? '오늘의 무료 사용량을 모두 썼습니다. 내일 다시 시도하거나 규칙으로 정리를 이용해 주세요.'
+                : 'AI 정리에 실패했습니다. 규칙으로 정리를 시도해 주세요.';
+        notice($('parseMsg'), msg, 'e'); return;
+      }
+      var items=data.items||[];
+      if(!items.length){
+        notice($('parseMsg'),'AI가 물품을 찾지 못했습니다. 화면 전체를 다시 복사해 붙여넣어 주세요.','e');
+        return;
+      }
+      State.rows = items.map(function(it){
+        var r={ id:uid(), name:String(it.name||''), spec:String(it.spec||''),
+                qty:num(it.qty)||1, unit:num(it.unit), ship:num(it.ship),
+                note:String(it.note||''), vendor:String(it.vendor||''),
+                url:String(it.url||''), flag:false };
+        syncShipNote(r);
+        return r;
+      });
+      renderRows(); saveLocal();
+      notice($('parseMsg'),'AI가 물품 '+State.rows.length+'건을 정리했습니다. 금액과 규격은 한 번 더 확인해 주세요.','g');
+      Sync.log('ai_parse');
+    })
+    .catch(function(){
+      btn.disabled=false; btn.textContent=old;
+      notice($('parseMsg'),'AI 서버에 연결하지 못했습니다. 네트워크를 확인하거나 규칙으로 정리를 이용해 주세요.','e');
+    });
 }
 
 /* =========================================================
@@ -1143,7 +1103,7 @@ function wire(){
     }catch(err){}
   });
 
-  $('btnSample').addEventListener('click', function(){ $('rawInput').value=SAMPLE; toast('예시를 넣었습니다. 표로 정리를 눌러 보세요.'); });
+  $('btnSample').addEventListener('click', function(){ $('rawInput').value=SAMPLE; toast('예시를 넣었습니다. 규칙으로 정리를 눌러 보세요.'); });
   $('btnClearIn').addEventListener('click', function(){ $('rawInput').value=''; notice($('parseMsg'),'',''); });
 
   $('btnParse').addEventListener('click', function(){
@@ -1151,7 +1111,7 @@ function wire(){
     if(!raw.trim()){ notice($('parseMsg'),'붙여넣은 내용이 없습니다.','e'); return; }
     var res=parseCart(raw);
     if(!res.rows.length){
-      notice($('parseMsg'),'물품을 찾지 못했습니다. 수량이 <b>“단일상품 / 1개”</b>처럼 보이는 화면 전체를 복사했는지 확인해 주세요. 행을 직접 추가해 입력할 수도 있습니다.','e');
+      notice($('parseMsg'),'물품을 찾지 못했습니다. 이 쇼핑몰은 형식이 달라 규칙으로 정리하기 어려울 수 있습니다. <b>✨ AI로 정리</b>를 시도해 보거나, 행을 직접 추가해 입력해 주세요.','e');
       return;
     }
     State.rows=res.rows; renderRows(); saveLocal();
@@ -1162,6 +1122,8 @@ function wire(){
     if(res.warns.length) msgs.push(res.warns.join(' '));
     notice($('parseMsg'), msgs.join('<br>'), (res.warns.length||flagged)?'w':'g');
   });
+
+  $('btnParseAI').addEventListener('click', callAIParse);
 
   $('btnAddRow').addEventListener('click', function(){ State.rows.push(blankRow()); renderRows(); saveLocal(); });
   $('btnClearRows').addEventListener('click', function(){
@@ -1187,8 +1149,9 @@ function wire(){
     var amt=wrap.querySelector('input[data-k="_amt"]');
     if(amt) amt.value=won(rowAmount(r));
     if(k==='ship'){
+      syncShipNote(r);
       var note=wrap.querySelector('input[data-k="note"]');
-      if(note) note.placeholder = num(r.ship)>0 ? ('배송비 '+won(num(r.ship))+'원 자동 포함') : '';
+      if(note) note.value=r.note;
     }
     renderTotals(); saveLocal();
   });
@@ -1208,11 +1171,7 @@ function wire(){
     });
   });
 
-  ['mTitle','mProject','mAccount','mDate','mDrafter','mPurpose'].forEach(function(id){
-    $(id).addEventListener('input', saveLocal);
-  });
-  $('mBudget').addEventListener('input', function(){ renderTotals(); saveLocal(); });
-  $('mBudget').addEventListener('blur', function(){ this.value = num(this.value)?won(num(this.value)):''; });
+  $('docTitle').addEventListener('input', saveLocal);
 
   $('btnXlsxBasic').addEventListener('click', exportBasic);
   $('btnCopyTable').addEventListener('click', copyTableText);
@@ -1243,45 +1202,20 @@ function wire(){
     else if(act==='del'){
       confirmAsk('저장된 기안을 삭제합니다. 되돌릴 수 없습니다.','삭제',function(){
         State.history=State.history.filter(function(x){ return x.id!==id; });
-        persistHistory(); renderHistory(); Sync.delHistory(id);
+        persistHistory(); renderHistory();
       });
     }
   });
-
-  $('btnAuth').addEventListener('click', function(){
-    if(Sync.user){ try{ firebase.auth().signOut(); toast('로그아웃했습니다.'); }catch(e){} return; }
-    notice($('authMsg'),'',''); $('authMask').hidden=false;
-  });
-  $('authClose').addEventListener('click', function(){ $('authMask').hidden=true; });
-  $('authLogin').addEventListener('click', function(){ doAuth('login'); });
-  $('authSignup').addEventListener('click', function(){ doAuth('signup'); });
 
   $('confNo').addEventListener('click', function(){ $('confMask').hidden=true; confCb=null; });
   $('confYes').addEventListener('click', function(){ $('confMask').hidden=true; if(confCb){ confCb(); confCb=null; } });
   document.addEventListener('keydown', function(e){
     if(e.key!=='Escape') return;
-    ['confMask','authMask','mapMask'].forEach(function(id){ $(id).hidden=true; });
+    ['confMask','mapMask'].forEach(function(id){ $(id).hidden=true; });
   });
-  ['confMask','authMask','mapMask'].forEach(function(id){
+  ['confMask','mapMask'].forEach(function(id){
     $(id).addEventListener('click', function(e){ if(e.target===this) this.hidden=true; });
   });
-}
-
-function doAuth(kind){
-  var em=$('authEmail').value.trim(), pw=$('authPw').value;
-  if(!em || !pw){ notice($('authMsg'),'이메일과 비밀번호를 입력해 주세요.','e'); return; }
-  if(!Sync.ready){ notice($('authMsg'),'배포 환경에서만 로그인할 수 있습니다.','e'); return; }
-  var auth=firebase.auth();
-  var p = kind==='signup' ? auth.createUserWithEmailAndPassword(em,pw) : auth.signInWithEmailAndPassword(em,pw);
-  p.then(function(){ $('authMask').hidden=true; $('authPw').value=''; toast('로그인했습니다.'); })
-   .catch(function(e){
-     var msg=e.code||e.message;
-     if(/wrong-password|invalid-credential/.test(msg)) msg='이메일 또는 비밀번호가 맞지 않습니다.';
-     else if(/user-not-found/.test(msg)) msg='등록되지 않은 계정입니다. 회원가입을 눌러 주세요.';
-     else if(/email-already-in-use/.test(msg)) msg='이미 가입된 이메일입니다. 로그인을 눌러 주세요.';
-     else if(/weak-password/.test(msg)) msg='비밀번호는 6자 이상이어야 합니다.';
-     notice($('authMsg'),msg,'e');
-   });
 }
 
 /* =========================================================
@@ -1295,14 +1229,13 @@ function boot(){
     var m=localStorage.getItem(LS.meta); writeMeta(m?JSON.parse(m):{date:todayStr()});
     var h=localStorage.getItem(LS.hist); if(h) State.history=JSON.parse(h)||[];
   }catch(e){}
-  if(!$('mDate').value) $('mDate').value=todayStr();
   renderRows(); renderHistory();
-  Sync.init();
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot);
 else boot();
 
-window.__PUMUI__ = { parseCart:parseCart, totals:totals, State:State, rowAmount:rowAmount, rowNote:rowNote, num:num };
+window.__PUMUI__ = { parseCart:parseCart, totals:totals, State:State, rowAmount:rowAmount, rowNote:rowNote,
+  num:num, syncShipNote:syncShipNote, htmlToText:htmlToText, callAIParse:callAIParse, aiParseAvailable:aiParseAvailable };
 </script>
 </body>
 </html>
