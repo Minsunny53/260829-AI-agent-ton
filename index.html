@@ -110,7 +110,7 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
 .tbl{min-width:64rem}
 .trow{
   display:grid;
-  grid-template-columns:2.1rem minmax(9rem,2.1fr) minmax(5.5rem,1fr) 3.4rem 5.6rem 5rem 6rem minmax(7rem,1.3fr) minmax(6rem,1fr) 6.2rem 2rem;
+  grid-template-columns:2.1rem minmax(9rem,2.1fr) minmax(5.5rem,1fr) 3.4rem 5.6rem 5rem 6rem minmax(7rem,1.3fr) minmax(6rem,1fr) 7.4rem 2rem;
   gap:.25rem;align-items:center;padding:.3rem .4rem;border-bottom:1px solid var(--line-soft);
 }
 .trow:last-child{border-bottom:0}
@@ -125,6 +125,15 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
 .trow input[readonly]{background:transparent;border-color:transparent;font-weight:700;color:var(--text)}
 .idx{font-size:.72rem;color:var(--faint);text-align:center;font-variant-numeric:tabular-nums}
 .rm{border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:.95rem;line-height:1;padding:.2rem}
+.url-wrap{display:flex;align-items:center;gap:.2rem;min-width:0}
+.url-wrap input{flex:1;min-width:0}
+.url-open{
+  flex:none;width:1.55rem;height:1.55rem;display:grid;place-items:center;border-radius:.3rem;
+  border:1px solid var(--field-line);background:var(--panel);color:var(--focus);
+  text-decoration:none;font-size:.75rem;line-height:1;
+}
+.url-open:hover{background:var(--panel-2)}
+.url-open[aria-disabled="true"]{opacity:.35;pointer-events:none;color:var(--faint)}
 .rm:hover{color:var(--seal)}
 .rowflag{color:var(--warn);font-size:.7rem;text-align:center}
 .empty{padding:2.25rem 1rem;text-align:center;color:var(--faint);font-size:.8125rem}
@@ -399,16 +408,19 @@ var FS = {
 /* =========================================================
    파서
    ========================================================= */
-var NOISE = /^(합배송|합배송\s*상품|묶음배송|옵션\/수량\s*변경.*|옵션\/수량\s*변경|바로\s*구매|장바구니|선택삭제|전체선택|전체\s*선택|삭제|관심상품|주문하기|배송비\s*무료|무료배송|품절|재고.*)$/;
+var NOISE = /^(합배송|합배송\s*상품|묶음배송|옵션\/수량\s*변경.*|옵션\/수량\s*변경|바로\s*구매|장바구니|선택삭제|전체선택|전체\s*선택|삭제|관심상품|주문하기|배송비\s*무료|무료배송|품절|재고.*|쿠폰적용|쿠폰을\s*적용해보세요!?|담기|찜하기)$/;
 var RE = {
   mdLink   : /\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g,
+  linkMark : /^§LINK:(https?:\/\/[^§]+)§$/,
   qty      : /^(?:(.*?)\s*[\/|]\s*)?(?:수량\s*[:：]?\s*)?(\d{1,4})\s*개$/,
   price    : /^([0-9][0-9,]*)\s*원$/,
   groupSum : /총\s*상품\s*금액\s*([0-9,]+)\s*원(?:.*?배송비\s*([0-9,]+)\s*원)?/,
   shipOnly : /배송비\s*([0-9,]+)\s*원/,
   freeShip : /([0-9,]+)\s*원\s*이상\s*무료배송/,
   cartPrice: /담을\s*때\s*금액\s*[:：]?\s*(?:1개당\s*)?([0-9,]+)\s*원/,
-  addedAt  : /^담은\s*일시/
+  addedAt  : /^담은\s*일시/,
+  /* 지마켓 등 "상품금액-할인금액+배송비=주문금액" 형태 영수증식 표기에서 최종 결제금액을 우선 채택 */
+  orderAmt : /주문\s*금액\s*[:：]?\s*([0-9,]+)\s*원/
 };
 
 function tokenize(raw){
@@ -429,7 +441,9 @@ function tokenize(raw){
       var tail=line.slice(last).trim();
       if(tail) out.push({t:'text', v:tail});
     } else {
-      out.push({t:'text', v:line});
+      var lm = line.match(RE.linkMark);
+      if(lm) out.push({t:'linkmark', url:lm[1]});
+      else out.push({t:'text', v:line});
     }
   }
   return out;
@@ -439,20 +453,84 @@ function isMinishop(tok){
   return tok.t==='link' && /\/(minishop|seller|store|brand|shop)\//i.test(tok.url||'');
 }
 
+/* 도메인 → 쇼핑몰 표시명. 서브도메인(item.gmarket.co.kr 등)도 자동으로 매칭됨.
+   목록에 없는 몰은 도메인에서 이름을 최대한 유추하되(예: sometestmall.co.kr → "Sometestmall"),
+   실제와 다를 수 있으니 표에서 직접 고쳐 쓸 수 있다. */
+var KNOWN_MALLS = [
+  ['gmarket.co.kr','G마켓'], ['coupang.com','쿠팡'], ['11st.co.kr','11번가'],
+  ['auction.co.kr','옥션'], ['interpark.com','인터파크'], ['wemakeprice.com','위메프'],
+  ['tmon.co.kr','티몬'], ['ssg.com','SSG닷컴'], ['lotteon.com','롯데ON'], ['lotte.com','롯데닷컴'],
+  ['smartstore.naver.com','네이버 스마트스토어'], ['shopping.naver.com','네이버쇼핑'],
+  ['i-screammall.co.kr','아이스크림몰'], ['danawa.com','다나와'], ['gift.kakao.com','카카오톡 선물하기'],
+  ['oliveyoung.co.kr','올리브영'], ['musinsa.com','무신사'], ['amazon.co.kr','아마존'], ['amazon.com','아마존'],
+  ['aliexpress.com','알리익스프레스'], ['temu.com','테무'], ['daisomall.co.kr','다이소몰'],
+  ['s2b.kr','학교장터(S2B)'], ['hmall.com','현대Hmall'], ['gsshop.com','GS SHOP'],
+  ['cjonstyle.com','CJ온스타일'], ['kurly.com','마켓컬리'], ['school-box.co.kr','스쿨박스']
+];
+function hostnameOf(url){
+  try{ return new URL(url).hostname.toLowerCase().replace(/^www\./,''); }
+  catch(e){
+    var m=String(url||'').match(/^https?:\/\/([^\/:?#]+)/i);
+    return m ? m[1].toLowerCase().replace(/^www\./,'') : '';
+  }
+}
+function mallNameFromUrl(url){
+  var host=hostnameOf(url);
+  if(!host) return '';
+  for(var i=0;i<KNOWN_MALLS.length;i++){
+    var d=KNOWN_MALLS[i][0];
+    if(host===d || host.endsWith('.'+d)) return KNOWN_MALLS[i][1];
+  }
+  var STOP=['www','m','shop','shopping','item','goods','mall','store','minishop','image','img','cdn','cafe24'];
+  var TLDS=['co.kr','or.kr','ne.kr','pe.kr','go.kr','ac.kr','kr','com','net','org','io'];
+  var parts=host.split('.');
+  for(var t=0;t<TLDS.length;t++){
+    var tp=TLDS[t].split('.');
+    if(parts.length>tp.length && parts.slice(parts.length-tp.length).join('.')===TLDS[t]){
+      parts=parts.slice(0,parts.length-tp.length); break;
+    }
+  }
+  parts=parts.filter(function(p){ return STOP.indexOf(p)===-1; });
+  if(!parts.length) return '';
+  var label=parts[parts.length-1];
+  return label ? label.charAt(0).toUpperCase()+label.slice(1) : '';
+}
+/* rows(각 r.url 보유)와 그 외 발견된 링크들을 모아 가장 많이 등장한 쇼핑몰명을 모든 행의 구입처로 통일한다.
+   규칙 기반 파서와 AI 파서 결과 모두 이 함수를 거친다. */
+function overrideVendorByMall(rows, extraUrls){
+  var mallCounts={}, bestMall=null, bestCount=0;
+  function countMall(url){
+    var m=mallNameFromUrl(url);
+    if(!m) return;
+    mallCounts[m]=(mallCounts[m]||0)+1;
+    if(mallCounts[m]>bestCount){ bestCount=mallCounts[m]; bestMall=m; }
+  }
+  rows.forEach(function(r){ if(r.url) countMall(r.url); });
+  (extraUrls||[]).forEach(function(u){ if(u) countMall(u); });
+  if(bestMall){ rows.forEach(function(r){ r.vendor=bestMall; }); }
+  return bestMall;
+}
+
 function parseCart(raw){
   var toks = tokenize(raw);
   var groups=[], g={vendor:'', ship:null, declared:null, items:[]};
-  var pendLinks=[], pendTexts=[];
+  var pendLinks=[], pendTexts=[], pendLinkMarkUrl=null;
   function pushGroup(){ if(g.items.length || g.declared!=null) groups.push(g); g={vendor:'',ship:null,declared:null,items:[]}; }
 
   for(var i=0;i<toks.length;i++){
     var tk=toks[i];
 
+    if(tk.t==='linkmark'){
+      // 상품명은 텍스트로만 있고 썸네일 이미지에만 링크가 걸린 경우(<a><img></a>) — URL만 기억해 둔다
+      pendLinkMarkUrl = tk.url;
+      continue;
+    }
+
     if(tk.t==='link'){
       if(isMinishop(tk)){
         if(g.items.length) pushGroup();
         g.vendor = tk.label;
-        pendLinks=[]; pendTexts=[];
+        pendLinks=[]; pendTexts=[]; pendLinkMarkUrl=null;
         continue;
       }
       pendLinks.push(tk);
@@ -466,7 +544,7 @@ function parseCart(raw){
     if(gs){
       g.declared = num(gs[1]);
       g.ship = gs[2]!=null ? num(gs[2]) : (v.match(RE.shipOnly)? num(v.match(RE.shipOnly)[1]) : 0);
-      pushGroup(); pendLinks=[]; pendTexts=[];
+      pushGroup(); pendLinks=[]; pendTexts=[]; pendLinkMarkUrl=null;
       continue;
     }
     if(RE.freeShip.test(v)){ continue; }
@@ -478,20 +556,26 @@ function parseCart(raw){
       var nameTok = pendLinks.length ? pendLinks[pendLinks.length-1] : null;
       var brand   = pendLinks.length>1 ? pendLinks[pendLinks.length-2].label : '';
       var name = nameTok ? nameTok.label : (pendTexts.length? pendTexts[pendTexts.length-1] : '');
-      var url  = nameTok ? nameTok.url : '';
+      var url  = nameTok ? nameTok.url : (pendLinkMarkUrl || '');
       if(!name && pendTexts.length) name = pendTexts[pendTexts.length-1];
 
-      // 앞으로 스캔: 금액 / 참고금액
-      var amount=0, cartNote='';
+      // 앞으로 스캔: 금액 / 참고금액 / 최종 결제금액(주문금액) 우선
+      var amount=0, cartNote='', orderAmt=null;
       for(var j=i+1;j<toks.length;j++){
         var nx=toks[j];
         if(nx.t==='link'){ if(isMinishop(nx)) break; else continue; }
+        if(nx.t==='linkmark'){ continue; }
         if(RE.qty.test(nx.v) || RE.groupSum.test(nx.v)) break;
         var cp=nx.v.match(RE.cartPrice);
         if(cp){ cartNote='담을 때 '+won(num(cp[1]))+'원'; continue; }
+        if(orderAmt==null){
+          var oa=nx.v.match(RE.orderAmt);
+          if(oa){ orderAmt=num(oa[1]); continue; }
+        }
         var pm=nx.v.match(RE.price);
         if(pm && !amount){ amount=num(pm[1]); }
       }
+      if(orderAmt!=null) amount=orderAmt;
       if(!amount && pendTexts.length){
         for(var k=pendTexts.length-1;k>=0;k--){
           var pm2=pendTexts[k].match(RE.price);
@@ -505,7 +589,7 @@ function parseCart(raw){
         };
         g.items.push(newRow);
       }
-      pendLinks=[]; pendTexts=[];
+      pendLinks=[]; pendTexts=[]; pendLinkMarkUrl=null;
       continue;
     }
 
@@ -538,6 +622,11 @@ function parseCart(raw){
       warns.push('그룹 '+(gi+1)+': 화면 표시 합계 '+won(gr.declared)+'원과 항목 합계 '+won(sum)+'원이 다릅니다.');
     }
   }
+
+  // 구입처를 개별 판매자(레킷코리아공식몰 등)가 아니라 실제 결제한 쇼핑몰(G마켓, 아이스크림몰 등)로 통일
+  var extraUrls = toks.filter(function(t){ return (t.t==='link'||t.t==='linkmark') && t.url; }).map(function(t){ return t.url; });
+  overrideVendorByMall(rows, extraUrls);
+
   return { rows:rows, warns:warns };
 }
 
@@ -610,7 +699,10 @@ function renderRows(){
       + '<div class="c-amt" data-l="예상금액"><input class="num" data-k="_amt" readonly value="'+won(rowAmount(r))+'" /></div>'
       + '<div class="c-note" data-l="비고"><input data-k="note" value="'+esc(r.note)+'" placeholder="비고" /></div>'
       + '<div class="c-vendor" data-l="구입처"><input data-k="vendor" value="'+esc(r.vendor)+'" /></div>'
-      + '<div class="c-url" data-l="구입처 링크"><input data-k="url" value="'+esc(r.url)+'" /></div>'
+      + '<div class="c-url" data-l="구입처 링크"><div class="url-wrap">'
+      +   '<input data-k="url" value="'+esc(r.url)+'" placeholder="https://" />'
+      +   '<a class="url-open" href="'+(/^https?:\/\//i.test(r.url||'')?esc(r.url):'#')+'" target="_blank" rel="noopener noreferrer" title="새 탭에서 열어 확인" aria-disabled="'+(/^https?:\/\//i.test(r.url||'')?'false':'true')+'">↗</a>'
+      + '</div></div>'
       + '<div class="c-rm"><button class="rm" data-act="del" title="이 행 삭제" aria-label="행 삭제">✕</button></div>'
       + '</div>';
   }
@@ -1007,10 +1099,31 @@ function htmlToText(html){
   box.innerHTML=html;
   document.body.appendChild(box);
 
+  // 수량 스텝퍼(-  2  +)처럼 값이 <input>/<select> 안에만 들어있으면 textContent에 안 잡히므로
+  // 값 자체를 텍스트 노드로 바꿔 넣는다.
+  var formEls=box.querySelectorAll('input,select,textarea');
+  for(var f=0; f<formEls.length; f++){
+    var el=formEls[f], val='';
+    if(el.tagName==='SELECT'){
+      var opt=el.options && el.options[el.selectedIndex];
+      val=opt ? (opt.textContent||opt.value||'') : '';
+    } else {
+      var type=(el.getAttribute('type')||'text').toLowerCase();
+      if(['button','submit','reset','hidden','file','checkbox','radio','image'].indexOf(type)>-1) continue;
+      val = (el.value!=null && el.value!=='') ? el.value : (el.getAttribute('value')||'');
+    }
+    val=String(val||'').trim();
+    if(val && el.replaceWith) el.replaceWith(document.createTextNode(' '+val+' '));
+    else if(el.remove) el.remove();
+  }
+
+  // 썸네일 이미지만 감싼 링크(<a><img></a>, 텍스트 없음)는 마커로 남겨 URL을 잃지 않게 한다.
   var as=box.querySelectorAll('a');
   for(var i=0;i<as.length;i++){
-    var a=as[i], t=(a.textContent||'').trim(), href=a.href||'';
-    if(t && /^https?:/i.test(href)) a.textContent='\n['+t+']('+href+')\n';
+    var a=as[i], t=(a.textContent||'').trim();
+    var href=a.getAttribute('href')||a.href||'';
+    if(!/^https?:\/\//i.test(href)) continue;
+    a.textContent = t ? ('\n['+t+']('+href+')\n') : ('\n§LINK:'+href+'§\n');
   }
   // innerText는 detach된 요소·headless 환경에서 레이아웃 정보가 없어 줄바꿈이 유실되므로,
   // 표/블록 경계에 직접 탭·개행 문자를 심어 textContent로 읽는다.
@@ -1071,6 +1184,7 @@ function callAIParse(){
         syncShipNote(r);
         return r;
       });
+      overrideVendorByMall(State.rows);
       renderRows(); saveLocal();
       notice($('parseMsg'),'AI가 물품 '+State.rows.length+'건을 정리했습니다. 금액과 규격은 한 번 더 확인해 주세요.','g');
       Sync.log('ai_parse');
@@ -1152,6 +1266,15 @@ function wire(){
       syncShipNote(r);
       var note=wrap.querySelector('input[data-k="note"]');
       if(note) note.value=r.note;
+    }
+    if(k==='url'){
+      var openBtn=wrap.querySelector('.url-open');
+      if(openBtn){
+        var u=(r.url||'').trim();
+        var valid=/^https?:\/\//i.test(u);
+        openBtn.setAttribute('href', valid ? u : '#');
+        openBtn.setAttribute('aria-disabled', valid ? 'false' : 'true');
+      }
     }
     renderTotals(); saveLocal();
   });
@@ -1235,7 +1358,8 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 else boot();
 
 window.__PUMUI__ = { parseCart:parseCart, totals:totals, State:State, rowAmount:rowAmount, rowNote:rowNote,
-  num:num, syncShipNote:syncShipNote, htmlToText:htmlToText, callAIParse:callAIParse, aiParseAvailable:aiParseAvailable };
+  num:num, syncShipNote:syncShipNote, htmlToText:htmlToText, callAIParse:callAIParse, aiParseAvailable:aiParseAvailable,
+  renderRows:renderRows, mallNameFromUrl:mallNameFromUrl, hostnameOf:hostnameOf, overrideVendorByMall:overrideVendorByMall };
 </script>
 </body>
 </html>
