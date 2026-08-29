@@ -173,6 +173,17 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
 .notice.g{background:var(--ledger-soft);color:var(--ledger)}
 .notice[hidden]{display:none}
 
+.shot-zone{
+  margin-top:.625rem;border:1.5px dashed var(--line-soft);border-radius:.55rem;
+  padding:.625rem .75rem;font-size:.78rem;color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;transition:border-color .15s,background .15s;
+}
+.shot-zone:hover,.shot-zone:focus-visible{border-color:var(--focus);background:var(--panel-2)}
+.shot-zone.drag{border-color:var(--focus);background:var(--panel-2)}
+.shot-zone.has-image{cursor:default}
+#shotPreview{max-height:3.5rem;border-radius:.4rem;border:1px solid var(--line-soft)}
+#shotPreview[hidden]{display:none}
+
 /* ============ 이력 ============ */
 .hist{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.5rem}
 .hitem{border:1px solid var(--line-soft);border-radius:.55rem;padding:.55rem .625rem;background:var(--panel-2)}
@@ -243,6 +254,14 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
       <textarea id="rawInput" class="inp" placeholder="쇼핑몰 장바구니 화면을 드래그해서 복사한 뒤 여기에 붙여넣으세요. 웹페이지에서 그대로 복사하면 상품 링크까지 자동으로 따라옵니다."></textarea>
       <p class="hint">아이스크림몰처럼 &quot;옵션 / N개&quot;·&quot;금액원&quot; 형태면 <b>규칙으로 정리</b>가 빠릅니다. G마켓·쿠팡처럼 형식이 다르면 <b>✨ AI로 정리</b>를 눌러보세요.</p>
       <div id="parseMsg" class="notice w" hidden></div>
+
+      <div id="shotZone" class="shot-zone" tabindex="0" role="button" aria-label="장바구니 스크린샷 첨부">
+        <span id="shotZoneText">📷 수량이 정확히 안 잡히면: 장바구니 <b>스크린샷</b>을 여기 클릭 후 붙여넣기(Ctrl+V)하거나 파일을 끌어다 놓으세요 — <b>✨ AI로 정리</b>에서만 사용됩니다 (선택)</span>
+        <img id="shotPreview" alt="첨부한 스크린샷 미리보기" hidden />
+        <button id="shotRemove" class="btn mini ghost" type="button" hidden>스크린샷 제거 ✕</button>
+      </div>
+      <input id="shotFile" type="file" accept="image/*" hidden />
+      <div id="shotMsg" class="notice w" hidden></div>
     </div>
   </section>
 
@@ -254,8 +273,10 @@ textarea.inp{min-height:9.5rem;resize:vertical;font-family:ui-monospace,SFMono-R
       <input id="bulkVendor" class="inp" style="width:9rem" placeholder="구입처 일괄 입력" />
       <button id="btnBulkVendor" class="btn mini">적용</button>
       <button id="btnAddRow" class="btn mini">＋ 행 추가</button>
+      <button id="btnAppendMode" class="btn mini" title="이 물품들은 남겨두고 다른 쇼핑몰 내용을 이어서 정리합니다">＋ 다른 장바구니 추가 정리하기</button>
       <button id="btnClearRows" class="btn mini ghost">전체 비우기</button>
     </div>
+    <div id="appendBanner" class="notice g" style="margin:.5rem .875rem 0" hidden></div>
     <div class="tablewrap">
       <div class="tbl">
         <div class="trow thead">
@@ -634,6 +655,9 @@ function parseCart(raw){
    상태
    ========================================================= */
 var State = { rows:[], history:[] };
+/* 1번 붙여넣기 카드의 부가 UI 상태: 여러 장바구니를 이어서 누적 정리하는 모드,
+   AI 정리 시 수량 정확도를 높이기 위해 첨부하는 스크린샷 이미지 */
+var UIState = { appendMode:false, attachedImage:null };
 
 function blankRow(){ return {id:uid(),name:'',spec:'',qty:1,unit:0,ship:0,note:'',vendor:'',url:'',flag:false}; }
 function rowAmount(r){ return num(r.unit)*num(r.qty) + num(r.ship); }
@@ -1140,6 +1164,75 @@ function htmlToText(html){
 }
 
 /* =========================================================
+   추가 정리 모드 — 여러 장바구니를 이어서 누적 정리
+   ========================================================= */
+var SHOT_HINT = '📷 수량이 정확히 안 잡히면: 장바구니 <b>스크린샷</b>을 여기 클릭 후 붙여넣기(Ctrl+V)하거나 파일을 끌어다 놓으세요 — <b>✨ AI로 정리</b>에서만 사용됩니다 (선택)';
+
+function renderAppendBanner(){
+  var el=$('appendBanner');
+  if(UIState.appendMode){
+    notice(el, '＋ 추가 정리 모드 — 새 장바구니 내용을 위 1번 칸에 붙여넣고 정리하면 기존 '+State.rows.length+'건 아래에 이어서 추가됩니다.', 'g');
+  } else {
+    notice(el, '', '');
+  }
+}
+function setAppendMode(on){
+  UIState.appendMode = on;
+  var btn=$('btnAppendMode');
+  if(btn) btn.textContent = on ? '추가 정리 모드 취소' : '＋ 다른 장바구니 추가 정리하기';
+  renderAppendBanner();
+}
+function enterAppendMode(){
+  if(UIState.appendMode){ setAppendMode(false); toast('추가 정리 모드를 취소했습니다.'); return; }
+  if(!State.rows.length){ toast('먼저 물품을 정리한 뒤에 사용할 수 있어요.'); return; }
+  $('rawInput').value='';
+  clearAttachedImage();
+  notice($('parseMsg'),'','');
+  setAppendMode(true);
+  if($('rawInput').scrollIntoView) $('rawInput').scrollIntoView({behavior:'smooth', block:'center'});
+  $('rawInput').focus();
+}
+
+/* =========================================================
+   스크린샷 첨부 — AI 정리 시 수량 인식 보조
+   ========================================================= */
+function setAttachedImage(mime, base64, dataUrl){
+  UIState.attachedImage = { mime:mime, base64:base64 };
+  var img=$('shotPreview');
+  img.src=dataUrl; img.hidden=false;
+  $('shotRemove').hidden=false;
+  $('shotZoneText').innerHTML='스크린샷이 첨부됐습니다 — <b>✨ AI로 정리</b> 실행 시 수량 인식에 함께 사용됩니다.';
+  $('shotZone').classList.add('has-image');
+  notice($('shotMsg'),'','');
+}
+function clearAttachedImage(){
+  UIState.attachedImage = null;
+  var img=$('shotPreview');
+  img.hidden=true; img.removeAttribute('src');
+  $('shotRemove').hidden=true;
+  $('shotZoneText').innerHTML=SHOT_HINT;
+  $('shotZone').classList.remove('has-image');
+  notice($('shotMsg'),'','');
+}
+function readImageFile(file){
+  if(!file || !/^image\//.test(file.type||'')){
+    notice($('shotMsg'),'이미지 파일만 첨부할 수 있습니다.','e'); return;
+  }
+  if(file.size > 6*1024*1024){
+    notice($('shotMsg'),'이미지 용량이 너무 큽니다. 장바구니 부분만 잘라서(6MB 이하) 다시 시도해 주세요.','e'); return;
+  }
+  var reader=new FileReader();
+  reader.onload=function(){
+    var dataUrl=String(reader.result||'');
+    var m=dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if(!m){ notice($('shotMsg'),'이미지를 읽지 못했습니다.','e'); return; }
+    setAttachedImage(m[1], m[2], dataUrl);
+  };
+  reader.onerror=function(){ notice($('shotMsg'),'이미지를 읽지 못했습니다.','e'); };
+  reader.readAsDataURL(file);
+}
+
+/* =========================================================
    AI 정리 — Apps Script 프록시를 거쳐 Gemini Flash 호출
    (Gemini 키는 브라우저에 노출되지 않고 Apps Script 안에만 존재)
    ========================================================= */
@@ -1148,19 +1241,24 @@ function aiParseAvailable(){
 }
 function callAIParse(){
   var raw=$('rawInput').value;
-  if(!raw.trim()){ notice($('parseMsg'),'붙여넣은 내용이 없습니다.','e'); return; }
+  var image=UIState.attachedImage;
+  if(!raw.trim() && !image){ notice($('parseMsg'),'텍스트를 붙여넣거나 스크린샷을 첨부해 주세요.','e'); return; }
   if(!aiParseAvailable()){
     notice($('parseMsg'),'AI로 정리는 배포된 환경(Apps Script 프록시)에서만 동작합니다. 지금은 <b>규칙으로 정리</b>를 이용해 주세요.','e');
     return;
   }
   var btn=$('btnParseAI'), old=btn.textContent;
+  var wasAppend=UIState.appendMode;
   btn.disabled=true; btn.textContent='정리 중…';
-  notice($('parseMsg'),'AI가 내용을 읽는 중입니다…','w');
+  notice($('parseMsg'), image ? 'AI가 스크린샷과 텍스트를 함께 읽는 중입니다…' : 'AI가 내용을 읽는 중입니다…', 'w');
+
+  var payload = { action:'ai_parse_cart', text: raw };
+  if(image) payload.image = { mimeType: image.mime, data: image.base64 };
 
   fetch(APPS_SCRIPT_URL, {
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({ action:'ai_parse_cart', text: raw })
+    body: JSON.stringify(payload)
   }).then(function(res){ return res.json(); })
     .then(function(data){
       btn.disabled=false; btn.textContent=old;
@@ -1176,7 +1274,7 @@ function callAIParse(){
         notice($('parseMsg'),'AI가 물품을 찾지 못했습니다. 화면 전체를 다시 복사해 붙여넣어 주세요.','e');
         return;
       }
-      State.rows = items.map(function(it){
+      var newRows = items.map(function(it){
         var r={ id:uid(), name:String(it.name||''), spec:String(it.spec||''),
                 qty:num(it.qty)||1, unit:num(it.unit), ship:num(it.ship),
                 note:String(it.note||''), vendor:String(it.vendor||''),
@@ -1184,9 +1282,13 @@ function callAIParse(){
         syncShipNote(r);
         return r;
       });
-      overrideVendorByMall(State.rows);
-      renderRows(); saveLocal();
-      notice($('parseMsg'),'AI가 물품 '+State.rows.length+'건을 정리했습니다. 금액과 규격은 한 번 더 확인해 주세요.','g');
+      overrideVendorByMall(newRows);
+      if(wasAppend){ State.rows = State.rows.concat(newRows); setAppendMode(false); }
+      else { State.rows = newRows; }
+      renderRows(); saveLocal(); clearAttachedImage();
+      notice($('parseMsg'),
+        (wasAppend ? '이번 장바구니에서 '+newRows.length+'건을 추가로 정리했습니다(총 '+State.rows.length+'건). ' : 'AI가 물품 '+State.rows.length+'건을 정리했습니다. ')
+        + '금액과 규격은 한 번 더 확인해 주세요.', 'g');
       Sync.log('ai_parse');
     })
     .catch(function(){
@@ -1228,9 +1330,14 @@ function wire(){
       notice($('parseMsg'),'물품을 찾지 못했습니다. 이 쇼핑몰은 형식이 달라 규칙으로 정리하기 어려울 수 있습니다. <b>✨ AI로 정리</b>를 시도해 보거나, 행을 직접 추가해 입력해 주세요.','e');
       return;
     }
-    State.rows=res.rows; renderRows(); saveLocal();
+    var wasAppend=UIState.appendMode;
+    if(wasAppend){ State.rows = State.rows.concat(res.rows); setAppendMode(false); }
+    else { State.rows=res.rows; }
+    renderRows(); saveLocal();
     var msgs=[];
-    msgs.push('물품 '+res.rows.length+'건을 정리했습니다.');
+    msgs.push(wasAppend
+      ? '이번 장바구니에서 '+res.rows.length+'건을 추가로 정리했습니다(총 '+State.rows.length+'건).'
+      : '물품 '+res.rows.length+'건을 정리했습니다.');
     var flagged=res.rows.filter(function(r){return r.flag;}).length;
     if(flagged) msgs.push('단가가 나누어떨어지지 않는 '+flagged+'건은 ⚠ 표시했습니다.');
     if(res.warns.length) msgs.push(res.warns.join(' '));
@@ -1238,12 +1345,42 @@ function wire(){
   });
 
   $('btnParseAI').addEventListener('click', callAIParse);
+  $('btnAppendMode').addEventListener('click', enterAppendMode);
+
+  $('shotZone').addEventListener('click', function(){ $('shotFile').click(); });
+  $('shotZone').addEventListener('keydown', function(e){
+    if(e.key==='Enter' || e.key===' '){ e.preventDefault(); $('shotFile').click(); }
+  });
+  $('shotZone').addEventListener('paste', function(e){
+    var items=(e.clipboardData && e.clipboardData.items) || [];
+    for(var i=0;i<items.length;i++){
+      if(items[i].type && items[i].type.indexOf('image/')===0){
+        e.preventDefault();
+        readImageFile(items[i].getAsFile());
+        return;
+      }
+    }
+  });
+  $('shotZone').addEventListener('dragover', function(e){ e.preventDefault(); this.classList.add('drag'); });
+  $('shotZone').addEventListener('dragleave', function(){ this.classList.remove('drag'); });
+  $('shotZone').addEventListener('drop', function(e){
+    e.preventDefault(); this.classList.remove('drag');
+    var f=e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if(f) readImageFile(f);
+  });
+  $('shotFile').addEventListener('change', function(e){
+    var f=e.target.files && e.target.files[0];
+    if(f) readImageFile(f);
+    this.value='';
+  });
+  $('shotRemove').addEventListener('click', function(e){ e.stopPropagation(); clearAttachedImage(); });
 
   $('btnAddRow').addEventListener('click', function(){ State.rows.push(blankRow()); renderRows(); saveLocal(); });
   $('btnClearRows').addEventListener('click', function(){
     if(!State.rows.length) return;
     confirmAsk('정리된 물품 '+State.rows.length+'건을 모두 지웁니다. 되돌릴 수 없습니다.','전체 삭제',function(){
       State.rows=[]; renderRows(); saveLocal();
+      if(UIState.appendMode) setAppendMode(false);
     });
   });
   $('btnBulkVendor').addEventListener('click', function(){
@@ -1359,7 +1496,9 @@ else boot();
 
 window.__PUMUI__ = { parseCart:parseCart, totals:totals, State:State, rowAmount:rowAmount, rowNote:rowNote,
   num:num, syncShipNote:syncShipNote, htmlToText:htmlToText, callAIParse:callAIParse, aiParseAvailable:aiParseAvailable,
-  renderRows:renderRows, mallNameFromUrl:mallNameFromUrl, hostnameOf:hostnameOf, overrideVendorByMall:overrideVendorByMall };
+  renderRows:renderRows, mallNameFromUrl:mallNameFromUrl, hostnameOf:hostnameOf, overrideVendorByMall:overrideVendorByMall,
+  UIState:UIState, enterAppendMode:enterAppendMode, setAppendMode:setAppendMode,
+  readImageFile:readImageFile, clearAttachedImage:clearAttachedImage };
 </script>
 </body>
 </html>
