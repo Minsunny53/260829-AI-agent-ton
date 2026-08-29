@@ -18,9 +18,9 @@ jobs:
 
       - name: Inject secrets
         run: |
-          sed -i "s|__APPS_SCRIPT_URL__|${{ secrets.APPS_SCRIPT_URL }}|g" pumui_draft.html
+          sed -i "s|__APPS_SCRIPT_URL__|${{ secrets.APPS_SCRIPT_URL }}|g" index.html
           mkdir -p dist
-          cp pumui_draft.html dist/index.html
+          cp index.html dist/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
