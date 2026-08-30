@@ -976,6 +976,7 @@
         <p class="hint">채워질 값이 <b class="tpv-legend">색으로 표시</b>됩니다. 양식의 기존 서식·수식은 그대로 유지된 채 값만 들어갑니다.</p>
         <div id="tpvTable" class="pv" style="max-height:22rem"></div>
         <div id="tpvMsg" class="notice w" hidden></div>
+        <div id="tpvFallback" hidden style="margin-top:.5rem"></div>
       </div>
       <div class="modal-ft">
         <button id="tpvCancel" class="btn ghost">취소</button>
@@ -1422,6 +1423,31 @@
       a.href = url; a.download = name; document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 400);
     }
+    /* downloadBlob과 달리, 학교 보안 소프트웨어·브라우저 정책 때문에 자동 클릭이 조용히 막히는
+       경우를 대비해 "직접 눌러서 받는" 링크를 항상 함께 보여준다(다운로드 실패가 티가 안 나는 문제 대응). */
+    function triggerDownload(buf, filename, fallbackElId) {
+      var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var url = URL.createObjectURL(blob);
+      try {
+        var a = document.createElement('a');
+        a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+      } catch (e) { }
+      var box = fallbackElId && $(fallbackElId);
+      if (box) {
+        box.innerHTML = '';
+        var link = document.createElement('a');
+        link.href = url; link.download = filename; link.className = 'btn seal-btn';
+        link.textContent = '⬇ 자동으로 받아지지 않았다면 여기를 눌러 다운로드';
+        box.appendChild(link);
+        box.hidden = false;
+      }
+      setTimeout(function () { URL.revokeObjectURL(url); }, 5 * 60 * 1000);
+      return url;
+    }
+    function clearTpvFallback() {
+      var box = $('tpvFallback');
+      if (box) { box.hidden = true; box.innerHTML = ''; }
+    }
 
     function exportBasic() {
       if (!ensureRows()) return;
@@ -1772,62 +1798,109 @@
 
       $('mapMask').hidden = true;
       $('tpvMask').hidden = false;
+      clearTpvFallback();
+      var dlBtn = $('tpvDownload'); if (dlBtn) dlBtn.textContent = '다운로드';
     }
 
     /* 원본 파일에서 워크북을 새로 읽어 값을 채운 뒤 내려받는다 */
     function downloadTemplate() {
-      if (!ensureRows()) return;
-      if (!Tpl.buffer) { notice($('tpvMsg'), '원본 양식 파일을 다시 업로드해 주세요.', 'e'); return; }
-      var btn = $('tpvDownload'), old = btn.textContent;
-      btn.disabled = true; btn.textContent = '만드는 중…';
+      var btn = $('tpvDownload'), old = btn ? btn.textContent : '다운로드';
+      try {
+        if (!ensureRows()) return;
+        if (!Tpl.buffer) { notice($('tpvMsg'), '원본 양식 파일을 다시 업로드해 주세요.', 'e'); return; }
+        if (btn) { btn.disabled = true; btn.textContent = '만드는 중…'; }
+        notice($('tpvMsg'), '', '');
+        clearTpvFallback();
 
-      var wb = new ExcelJS.Workbook();
-      wb.xlsx.load(Tpl.buffer).then(function () {
-        var ws = wb.getWorksheet(Number(Tpl.sheetId)) || wb.worksheets[0];
-        var map = Tpl.map, start = Tpl.start, n = State.rows.length;
+        var wb = new ExcelJS.Workbook();
+        wb.xlsx.load(Tpl.buffer).then(function () {
+          var ws = wb.getWorksheet(Number(Tpl.sheetId)) || wb.worksheets[0];
+          if (!ws) throw new Error('시트를 찾을 수 없습니다. 파일을 다시 업로드해 주세요.');
+          var map = Tpl.map, start = Tpl.start, n = State.rows.length;
 
-        if (Tpl.mode === 'insert' && n > 1) {
-          try { ws.duplicateRow(start, n - 1, true); } catch (e) { }
-        }
-        for (var idx = 0; idx < n; idx++) {
-          var r = State.rows[idx], row = ws.getRow(start + idx);
-          var vals = templateValuesFor(r, idx);
-          for (var k in map) {
-            var cell = row.getCell(map[k]);
-            if (k === 'url' && r.url) { cell.value = { text: r.url, hyperlink: r.url }; }
-            else { cell.value = vals[k] === '' ? null : vals[k]; }
-            if (k === 'unit' || k === 'amt') { if (!cell.numFmt) cell.numFmt = '#,##0'; }
+          if (Tpl.mode === 'insert' && n > 1) {
+            try { ws.duplicateRow(start, n - 1, true); } catch (e) { }
           }
-          row.commit();
-        }
-        return wb.xlsx.writeBuffer();
-      }).then(function (buf) {
-        btn.disabled = false; btn.textContent = old;
-        var base = Tpl.fileName.replace(/\.xls[xm]$/i, '');
-        downloadBlob(buf, base + '_작성완료.xlsx');
-        $('tpvMask').hidden = true;
-        $('tplFile').value = '';
-        toast('양식에 채워 내려받았습니다.');
-      }).catch(function (e) {
-        btn.disabled = false; btn.textContent = old;
-        notice($('tpvMsg'), '저장 실패: ' + esc(e.message), 'e');
-      });
+          for (var idx = 0; idx < n; idx++) {
+            var r = State.rows[idx], row = ws.getRow(start + idx);
+            var vals = templateValuesFor(r, idx);
+            for (var k in map) {
+              var cell = row.getCell(map[k]);
+              if (k === 'url' && r.url) { cell.value = { text: r.url, hyperlink: r.url }; }
+              else { cell.value = vals[k] === '' ? null : vals[k]; }
+              if (k === 'unit' || k === 'amt') { if (!cell.numFmt) cell.numFmt = '#,##0'; }
+            }
+            row.commit();
+          }
+          return wb.xlsx.writeBuffer();
+        }).then(function (buf) {
+          if (btn) { btn.disabled = false; btn.textContent = '다시 다운로드'; }
+          var base = (Tpl.fileName || '양식').replace(/\.xls[xm]$/i, '');
+          var filename = base + '_작성완료.xlsx';
+          triggerDownload(buf, filename, 'tpvFallback');
+          notice($('tpvMsg'), '다운로드를 시작했습니다. 파일이 안 보이면 아래 버튼을 눌러 직접 받아 주세요.', 'g');
+          toast('양식에 채워 내려받았습니다.');
+        }).catch(function (e) {
+          if (btn) { btn.disabled = false; btn.textContent = old; }
+          notice($('tpvMsg'), '저장 실패: ' + esc((e && e.message) || String(e)), 'e');
+        });
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = old; }
+        notice($('tpvMsg'), '저장 실패: ' + esc((e && e.message) || String(e)), 'e');
+      }
     }
 
     /* ---------- 한글/표 복사 ---------- */
-    function copyTableText() {
-      if (!State.rows.length) { toast('먼저 물품을 정리해 주세요.'); return; }
+    function buildTablePlain() {
       var lines = [HEADERS.join('\t')];
-      for (var i = 0; i < State.rows.length; i++) {
-        var v = rowValues(State.rows[i], i);
-        lines.push(v.join('\t'));
-      }
+      for (var i = 0; i < State.rows.length; i++) { lines.push(rowValues(State.rows[i], i).join('\t')); }
       var t = totals();
       lines.push(['', '합계', '', t.qty, '', t.total, '', '', ''].join('\t'));
-      var text = lines.join('\n');
+      return lines.join('\n');
+    }
+    function buildTableHtml() {
+      var cellStyle = 'border:1px solid #999;padding:4px 8px;';
+      var htmlRows = ['<tr>' + HEADERS.map(function (h) {
+        return '<th style="' + cellStyle + 'background:#f0f0f0">' + esc(h) + '</th>';
+      }).join('') + '</tr>'];
+      for (var i = 0; i < State.rows.length; i++) {
+        var v = rowValues(State.rows[i], i);
+        htmlRows.push('<tr>' + v.map(function (x) {
+          return '<td style="' + cellStyle + '">' + esc(String(x == null ? '' : x)) + '</td>';
+        }).join('') + '</tr>');
+      }
+      var t = totals();
+      htmlRows.push('<tr>' + ['', '합계', '', t.qty, '', t.total, '', '', ''].map(function (x) {
+        return '<td style="' + cellStyle + 'font-weight:bold">' + esc(String(x)) + '</td>';
+      }).join('') + '</tr>');
+      return '<table style="border-collapse:collapse">' + htmlRows.join('') + '</table>';
+    }
+    /* 표를 복사한다. text/html도 함께 담아서, 한글(HWP)·워드·엑셀에 붙여넣을 때
+       탭으로 구분된 줄글이 아니라 실제 '표'로 들어가게 한다. */
+    function copyTableText() {
+      if (!State.rows.length) { toast('먼저 물품을 정리해 주세요.'); return; }
+      var plain = buildTablePlain();
+
+      if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+        try {
+          var html = buildTableHtml();
+          var item = new ClipboardItem({
+            'text/plain': new Blob([plain], { type: 'text/plain' }),
+            'text/html': new Blob([html], { type: 'text/html' })
+          });
+          navigator.clipboard.write([item]).then(function () {
+            toast('표를 복사했습니다. 한글·워드·엑셀에 붙여넣으면 표 형태로 들어갑니다.');
+          }).catch(function () { copyPlainFallback(plain); });
+          return;
+        } catch (e) { /* 지원 안 하는 환경이면 아래 일반 복사로 진행 */ }
+      }
+      copyPlainFallback(plain);
+    }
+    function copyPlainFallback(text) {
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function () { toast('표를 복사했습니다. 한글·엑셀에 붙여넣으세요.'); },
-          function () { fallbackCopy(text); });
+        navigator.clipboard.writeText(text).then(function () {
+          toast('표를 복사했습니다. 한글에서 표로 안 보이면, 붙여넣은 내용을 선택 후 "입력 → 표 → 문자열을 표로" 메뉴로 바꿔주세요.');
+        }, function () { fallbackCopy(text); });
       } else fallbackCopy(text);
     }
     function fallbackCopy(text) {
@@ -2323,9 +2396,10 @@
       $('mapApply').addEventListener('click', function () {
         if (collectMapping()) openTemplatePreview(false);
       });
-      $('tpvCancel').addEventListener('click', function () { $('tpvMask').hidden = true; $('tplFile').value = ''; });
+      $('tpvCancel').addEventListener('click', function () { $('tpvMask').hidden = true; $('tplFile').value = ''; clearTpvFallback(); });
       $('tpvBack').addEventListener('click', function () {
         $('tpvMask').hidden = true;
+        clearTpvFallback();
         syncMapUI();
         $('mapMask').hidden = false;
         notice($('mapMsg'), '열 지정을 바꾼 뒤 <b>미리보기</b>를 다시 눌러 확인하세요.', 'w');
