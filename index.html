@@ -730,12 +730,9 @@ function totals(){
   return t;
 }
 
-function saveLocal(){
-  try{
-    localStorage.setItem(LS.rows, JSON.stringify(State.rows));
-    localStorage.setItem(LS.meta, JSON.stringify(readMeta()));
-  }catch(e){}
-}
+/* 작업 중인 물품 목록은 저장하지 않는다.
+   창을 새로 열면 항상 빈 상태에서 시작하고, 남겨둘 내역은 5번 "기안 이력"에서 직접 저장한다. */
+function saveLocal(){ /* no-op */ }
 function readMeta(){
   return { title:$('docTitle').value };
 }
@@ -936,13 +933,14 @@ function readTemplate(file){
       Tpl.sel={row:Tpl.start, col:Tpl.map.name||0};
 
       notice($('tplMsg'),'','');
-      // 물품명 + 수량/금액 계열까지 잡혔으면 충분히 확신할 수 있으므로 설정 화면을 건너뛴다
-      if(best.g.confident){
+      // 셀을 직접 지정하지 않아도 항상 자동으로 채워 미리보기로 이동한다.
+      // 물품명 열조차 찾지 못한 경우에만 예외적으로 매핑 화면을 보여준다(그 외 값이 비어 있으면 미리보기에서 바로 확인 후 필요시 "매핑 수정"으로 고치면 됨).
+      if(best.g.cols.name){
         openTemplatePreview(true);
       }else{
         syncMapUI();
         $('mapMask').hidden=false;
-        notice($('mapMsg'),'양식을 자동으로 인식하지 못했습니다. 아래 미리보기에서 <b>첫 물품이 들어갈 칸</b>을 눌러 지정해 주세요.','w');
+        notice($('mapMsg'),'양식에서 <b>물품명 열</b>을 자동으로 찾지 못했습니다. 아래 미리보기에서 첫 물품이 들어갈 칸을 눌러 지정해 주세요.','w');
       }
     }).catch(function(e){
       notice($('tplMsg'),'이 파일을 열지 못했습니다. .xlsx 형식인지 확인해 주세요. ('+esc(e.message)+')','e');
@@ -1736,8 +1734,9 @@ function boot(){
   Theme.init(); FS.init();
   wire();
   try{
-    var r=localStorage.getItem(LS.rows); if(r) State.rows=JSON.parse(r)||[];
-    var m=localStorage.getItem(LS.meta); writeMeta(m?JSON.parse(m):{date:todayStr()});
+    // 이전 버전에서 자동 저장해 둔 작업 내역이 남아 있으면 지운다(창을 열 때마다 되살아나지 않도록)
+    localStorage.removeItem(LS.rows);
+    localStorage.removeItem(LS.meta);
     var h=localStorage.getItem(LS.hist); if(h) State.history=JSON.parse(h)||[];
   }catch(e){}
   applyMallProfile('');
