@@ -19,6 +19,7 @@ jobs:
       - name: Inject secrets
         run: |
           sed -i "s|__APPS_SCRIPT_URL__|${{ secrets.APPS_SCRIPT_URL }}|g" index.html
+          sed -i "s|__FIREBASE_CONFIG__|${{ secrets.FIREBASE_CONFIG }}|g" index.html
           mkdir -p dist
           cp index.html dist/index.html
 
