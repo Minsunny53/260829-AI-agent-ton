@@ -1180,7 +1180,9 @@
       var label = parts[parts.length - 1];
       return label ? label.charAt(0).toUpperCase() + label.slice(1) : '';
     }
-    /* rows(각 r.url 보유)와 그 외 발견된 링크들을 모아 가장 많이 등장한 쇼핑몰명을 모든 행의 구입처로 통일한다.
+    /* 구입처를 쇼핑몰명으로 통일하되, 여러 쇼핑몰 장바구니를 한 번에 붙여넣은 경우를 위해
+       "행 하나당" 그 행 자신의 링크를 최우선으로 판정한다(전체 텍스트에서 가장 많이 등장한
+       몰 하나로 모든 행을 덮어쓰지 않음). 자기 링크가 없는 행만 전체 텍스트의 다수결로 보완한다.
        규칙 기반 파서와 AI 파서 결과 모두 이 함수를 거친다. */
     function overrideVendorByMall(rows, extraUrls) {
       var mallCounts = {}, bestMall = null, bestCount = 0;
@@ -1192,7 +1194,12 @@
       }
       rows.forEach(function (r) { if (r.url) countMall(r.url); });
       (extraUrls || []).forEach(function (u) { if (u) countMall(u); });
-      if (bestMall) { rows.forEach(function (r) { r.vendor = bestMall; }); }
+
+      rows.forEach(function (r) {
+        var own = r.url ? mallNameFromUrl(r.url) : '';
+        if (own) r.vendor = own;
+        else if (bestMall) r.vendor = bestMall;
+      });
       return bestMall;
     }
 
@@ -1803,6 +1810,29 @@
     }
 
     /* 원본 파일에서 워크북을 새로 읽어 값을 채운 뒤 내려받는다 */
+    /* 학교 양식엔 "자동계산됨" 같은 공유 수식(shared formula)이 들어있는 경우가 있는데,
+       원본 파일 자체에 이미 깨진 공유 수식 참조가 남아있으면(오래된 파일에서 행을 복사/삭제하며
+       누적되는 흔한 문제) ExcelJS가 저장 단계에서 거부한다("Shared Formula master must exist ...").
+       이 경우 문제 되는 수식들을 캐시된 결과값으로 고정한 뒤 한 번 더 저장을 시도해 복구한다. */
+    function isSharedFormulaError(e) {
+      return /shared\s*formula/i.test(String((e && e.message) || e || ''));
+    }
+    function flattenFormulas(wb) {
+      var changed = 0;
+      wb.eachSheet(function (ws) {
+        ws.eachRow({ includeEmpty: false }, function (row) {
+          row.eachCell({ includeEmpty: false }, function (cell) {
+            var v = cell.value;
+            if (v && typeof v === 'object' && (v.formula !== undefined || v.sharedFormula !== undefined)) {
+              cell.value = (v.result !== undefined) ? v.result : null;
+              changed++;
+            }
+          });
+        });
+      });
+      return changed;
+    }
+
     function downloadTemplate() {
       var btn = $('tpvDownload'), old = btn ? btn.textContent : '다운로드';
       try {
@@ -1813,6 +1843,7 @@
         clearTpvFallback();
 
         var wb = new ExcelJS.Workbook();
+        var formulasFlattened = false;
         wb.xlsx.load(Tpl.buffer).then(function () {
           var ws = wb.getWorksheet(Number(Tpl.sheetId)) || wb.worksheets[0];
           if (!ws) throw new Error('시트를 찾을 수 없습니다. 파일을 다시 업로드해 주세요.');
@@ -1832,13 +1863,21 @@
             }
             row.commit();
           }
-          return wb.xlsx.writeBuffer();
+          return wb.xlsx.writeBuffer().catch(function (err) {
+            // 원본 양식에 이미 깨져 있던 공유 수식 때문에 저장이 막힌 경우, 값으로 고정해 한 번 더 시도
+            if (!isSharedFormulaError(err)) throw err;
+            flattenFormulas(wb);
+            formulasFlattened = true;
+            return wb.xlsx.writeBuffer();
+          });
         }).then(function (buf) {
           if (btn) { btn.disabled = false; btn.textContent = '다시 다운로드'; }
           var base = (Tpl.fileName || '양식').replace(/\.xls[xm]$/i, '');
           var filename = base + '_작성완료.xlsx';
           triggerDownload(buf, filename, 'tpvFallback');
-          notice($('tpvMsg'), '다운로드를 시작했습니다. 파일이 안 보이면 아래 버튼을 눌러 직접 받아 주세요.', 'g');
+          notice($('tpvMsg'), formulasFlattened
+            ? '다운로드를 시작했습니다. 이 양식에 있던 일부 자동계산 수식이 원본 파일 자체의 오류로 인해 값으로 고정되어 저장됐습니다. 파일을 열어 계산이 이상하면 <b>Ctrl+Alt+F9</b>로 다시 계산해 보세요. 파일이 안 보이면 아래 버튼을 눌러 직접 받아 주세요.'
+            : '다운로드를 시작했습니다. 파일이 안 보이면 아래 버튼을 눌러 직접 받아 주세요.', 'g');
           toast('양식에 채워 내려받았습니다.');
         }).catch(function (e) {
           if (btn) { btn.disabled = false; btn.textContent = old; }
